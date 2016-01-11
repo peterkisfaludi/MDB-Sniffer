@@ -128,7 +128,7 @@
 #include <SoftwareSerial.h>
 #include <Wire.h> 
 #include <util/setbaud.h>
-
+#include <avr/wdt.h>
 //----------------------------------------------------------------
 // STRUCTURES
 //----------------------------------------------------------------
@@ -165,12 +165,16 @@ struct MDB_Byte sendData[MDB_BUFFER_SIZE];
 void setup() {
   RPI_setup();
   MDB_setup();
+  wdt_disable();
+  delay(2L*1000L);
+  wdt_enable(WDTO_2S);
 }
 
 
 void loop() {
   RPI_read();
   MDB_read();
+  wdt_reset();
 }
 
 
@@ -281,6 +285,7 @@ void MDB_parse() {
   // send it to the intermediary
   RPI.write(recvData[0].mode);
   RPI.write(recvData[0].data);
+  Serial.println(recvData[0].data);
 }
 
 
