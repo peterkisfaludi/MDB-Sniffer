@@ -6,10 +6,6 @@
 // CONSTANTS
 //----------------------------------------------------------------
 
-//SD
-#define chipSelect 4
-const String MDBLog = "mdb";
-
 #define BAUD 9600
 #define RPI_BUFFER_SIZE  (64)
 #define MDB_BUFFER_SIZE (36+1)  // section 2.2, +1 for safety
@@ -21,7 +17,7 @@ const String MDBLog = "mdb";
 #define sENABLED 2
 #define sSESSION_IDLE 3
 #define sVEND 4
-#define sREVALUE 5w
+#define sREVALUE 5
 #define sNEGATIVE_VEND 6
 
 // retransmit states
@@ -133,9 +129,6 @@ const String MDBLog = "mdb";
 #include <Wire.h> 
 #include <util/setbaud.h>
 #include <avr/wdt.h>
-#include <SPI.h>
-#include <SD.h>
-
 //----------------------------------------------------------------
 // STRUCTURES
 //----------------------------------------------------------------
@@ -172,7 +165,6 @@ struct MDB_Byte sendData[MDB_BUFFER_SIZE];
 void setup() {
   RPI_setup();
   MDB_setup();
-  SD_setup();
   wdt_disable();
   delay(2L*1000L);
   wdt_enable(WDTO_2S);
@@ -214,6 +206,10 @@ void RPI_read() {
 
 void RPI_parse() {
 }
+
+
+
+
 
 void MDB_setup() {
   // Clear tx/rx buffers
@@ -289,18 +285,7 @@ void MDB_parse() {
   // send it to the intermediary
   RPI.write(recvData[0].mode);
   RPI.write(recvData[0].data);
-  //save to SD
-  String dataString = "";
-  File dataFile = SD.open(MDBLog, FILE_WRITE);
-  if (dataFile) {
-    dataFile.println(dataString);
-    dataFile.close();
-  }
-  else {
-    while(1);
-  }
-
-  //Serial.println(recvData[0].data);
+  Serial.println(recvData[0].data);
 }
 
 
@@ -394,27 +379,5 @@ void serial_write(struct MDB_Byte mdbb) {
   
   UDR0 = mdbb.data;
 }
-
-void SD_setup(){
-  RPI.print("Initializing SD card...");
-  // see if the card is present and can be initialized:
-  if (!SD.begin(chipSelect)) {
-    RPI.println("Card failed, or not present");
-    // don't do anything more, no SD card:
-    while(1);
-  }
-  RPI.println("card initialized.");
-  RPI.println("initialize log file to SD card...");
-
-  File dataFile = SD.open(MDBLog, FILE_WRITE);
-  if (dataFile) {
-    //dataFile.println(csvHeader);
-    dataFile.close();
-  }
-  else {
-    RPI.println("error opening MDBlog");
-  }
-}
-
 
 
