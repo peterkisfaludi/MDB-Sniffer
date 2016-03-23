@@ -1,10 +1,9 @@
 #include <SPI.h>
 #include <Ethernet.h>
 
-//SD
-#include <SD.h>
-#define chipSelect 4
-const String MDBLog = "mdb.csv";
+//RaspberryPi
+#include <SoftwareSerial.h>
+SoftwareSerial RPI(10, 11);
 
 //Ethernet
 byte mac_addr[] = {
@@ -50,29 +49,25 @@ float Price;
 #define STATUS_SIZE 40
 char Status[STATUS_SIZE];
 int Remark;
+#define GET_REQ_SIZE 140
+char get_req[GET_REQ_SIZE];
 
 void setup() {
-  //Ethernet setup
-  //pinMode(4, OUTPUT);
-  //digitalWrite(4, HIGH);
-  Serial.begin(9600);
+  RPI.begin(57600);
 
+  //Ethernet setup
   Ethernet_setup();
 
   //MDB setup
-  memset(Status,'\0',STATUS_SIZE);
+  memset(Status, '\0', STATUS_SIZE);
+  memset(get_req, '\0', GET_REQ_SIZE);
   MDB_setup();
 }
 
 void loop() {
 
-  upload_data();
-  delay(1000);
-  upload_status();
-  delay(1000);
-  return;
-  
   byte MDB_Output = MDB_read();
+  RPI.println(MDB_Output);
 
   if (MDB_Output == VEND) {
     //Cashless Device 1 Vend
@@ -88,13 +83,13 @@ void loop() {
       Item = item2;
       strncpy(Status, "vend_request", STATUS_SIZE);
       upload_status();
-      if (price1 > 0.0f){
+      if (price1 > 0) {
         Price = 25.6f + price2 * 0.1f;
       } else {
         Price = price2 * 0.1f;
       }
     }
-    else if (sub_command == VEND_APPROVED){
+    else if (sub_command == VEND_APPROVED) {
       strncpy(Status, "vend_approved", STATUS_SIZE);
       Remark = 1;
       upload_status();
@@ -107,9 +102,9 @@ void loop() {
     else if (sub_command == VEND_SUCCESS) {
       strncpy(Status, "vend_success", STATUS_SIZE);
       Remark = 1;
-      flag = 1;      
+      flag = 1;
       upload_data();
-      upload_status();      
+      upload_status();
     }
     else if (sub_command == VEND_FAILURE) {
       strncpy(Status, "vend_failure", STATUS_SIZE);
@@ -117,9 +112,9 @@ void loop() {
       upload_status();
     }
     else if (sub_command == SESSION_COMPLETE) {
-      if (flag != 1){
+      if (flag != 1) {
         strncpy(Status, "vend_session_completed", STATUS_SIZE);
-        upload_data();        
+        upload_data();
         upload_status();
       } else {
         flag = 0;
@@ -131,32 +126,29 @@ void loop() {
       upload_status();
     }
   }
-  
+
   else if (MDB_Output == READER) {
     byte sub_command2 = MDB_read();
-    if (sub_command2 == READER_DISABLE){
+    if (sub_command2 == READER_DISABLE) {
       strncpy(Status, "reader_disable", STATUS_SIZE);
-      if (flag2==1){
+      if (flag2 == 1) {
         upload_status();
       }
-      flag2=0;
+      flag2 = 0;
     }
-    else if (sub_command2 == READER_ENABLE){
+    else if (sub_command2 == READER_ENABLE) {
       strncpy(Status, "reader_enable", STATUS_SIZE);
-      if (flag2==0){
+      if (flag2 == 0) {
         upload_status();
       }
-      flag2=1;
+      flag2 = 1;
     }
   }
-
-  delay(10);
-  Serial.println("Still reading");
 }
 
 void Ethernet_setup() {
   if (Ethernet.begin(mac_addr) == 0) {
-    Serial.println("Failed to configure Ethernet using DHCP");
+    RPI.println("Failed to configure Ethernet using DHCP");
     // no point in carrying on, so do nothing forevermore:
     while (1) {
       delay(1000);
@@ -164,13 +156,13 @@ void Ethernet_setup() {
   }
 
   // print your local IP address:
-  Serial.print("My IP address: ");
+  RPI.print("My IP address: ");
   for (byte thisByte = 0; thisByte < 4; thisByte++) {
     // print the value of each byte of the IP address:
-    Serial.print(Ethernet.localIP()[thisByte], DEC);
-    Serial.print(".");
+    RPI.print(Ethernet.localIP()[thisByte], DEC);
+    RPI.print(".");
   }
-  Serial.println();
+  RPI.println();
   delay(1000);
 }
 
@@ -227,23 +219,23 @@ int USART_Receive() {
 void upload_data() {
   //Http req
   if (client.connect(server_addr, 80)) {
-    Serial.println("connected");
+    RPI.println("upload_data");
     // Make a HTTP request:
-    Serial.println("GET req");
+    RPI.println("GET req");
 
-    char get_req[] = "GET /upload_data.php?machineCode=aaaa&arrangementNo=5&price=222.8&remark=5 HTTP/1.1\n" \
-                     "Host: mdbraspberry.site88.net\n" \
+    char format[] =  "GET /upload_data.php?machineCode=%s&arrangementNo=%d&price=%d.%d&remark=%d HTTP/1.1\n" \
+                     "Host: %s\n" \
                      "\n" \
                      "Connection: close\n" \
                      "\n" \
                      ;
-
+    sprintf(get_req, format, mscode, Item, int(Price), int((Price - int(Price)) * 100), Remark, server_addr);
     client.println(get_req);
     client.stop();
   }
   else {
     // no connection to the server:
-    Serial.println("connection failed");
+    RPI.println("connection failed");
   }
 }
 
@@ -251,23 +243,24 @@ void upload_data() {
 void upload_status() {
   //Http req
   if (client.connect(server_addr, 80)) {
-    Serial.println("connected");
+    RPI.println("upload_status");
     // Make a HTTP request:
-    Serial.println("GET req");
+    RPI.println("GET req");
 
-    char get_req[] = "GET /upload_status.php?machineCode=abcd&status=vend_complete HTTP/1.1\n" \
-                     "Host: mdbraspberry.site88.net\n" \
-                     "\n" \
-                     "Connection: close\n" \
-                     "\n" \
-                     ;
+    char format[] = "GET /upload_status.php?machineCode=%s&status=%s HTTP/1.1\n" \
+                    "Host: %s\n" \
+                    "\n" \
+                    "Connection: close\n" \
+                    "\n" \
+                    ;
+    sprintf(get_req, format, mscode, Status, server_addr);
 
     client.println(get_req);
     client.stop();
   }
   else {
     // no connection to the server:
-    Serial.println("connection failed");
+    RPI.println("connection failed");
   }
 }
 
